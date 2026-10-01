@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { NextRequest } from "next/server";
 import type {
   ErrorResponse,
@@ -27,6 +28,22 @@ type OwmForecast = {
     pop: number;
   }[];
 };
+
+// 【一時的な診断用】キーの値は出さず、文字数・空白/引用符の有無・ハッシュ先頭12桁だけを返す
+// TODO: 原因確認後に削除する
+function describeKey(key: string) {
+  const hash = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 12);
+  const normalized = key.trim().replace(/^["']|["']$/g, "");
+  return {
+    length: key.length,
+    leadingWs: /^\s/.test(key),
+    trailingWs: /\s$/.test(key),
+    quoted: /^["']|["']$/.test(key),
+    sha256: hash(key),
+    normalizedLength: normalized.length,
+    normalizedSha256: hash(normalized),
+  };
+}
 
 function errorJson(message: string, status: number) {
   const body: ErrorResponse = { error: message };
@@ -60,6 +77,8 @@ export async function GET(request: NextRequest) {
     if (!geoRes.ok) {
       // URL にはキーが含まれるため、ログにはステータスだけを出す
       console.error(`Geocoding API エラー: status ${geoRes.status}`);
+      // 【一時的な診断用】TODO: 原因確認後に削除する
+      console.error(`[診断] APIキー情報: ${JSON.stringify(describeKey(apiKey))}`);
       return errorJson("天気情報の取得に失敗しました。", 502);
     }
 
