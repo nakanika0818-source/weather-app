@@ -17,6 +17,8 @@ export type ForecastItem = {
   humidity: number;
   /** 降水確率（%、pop を 100 倍した値） */
   pop: number;
+  /** 3 時間の降水量（mm、雨と雪の合計）。予報がない場合は 0 */
+  precipitation: number;
 };
 
 export type WeatherResponse = {

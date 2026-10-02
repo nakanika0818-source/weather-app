@@ -1,11 +1,15 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import ClothingAdvice from "@/components/ClothingAdvice";
+import CommuteForecast from "@/components/CommuteForecast";
 import DatePicker from "@/components/DatePicker";
 import HourlyList from "@/components/HourlyList";
 import SearchForm from "@/components/SearchForm";
 import WeatherCard from "@/components/WeatherCard";
-import type { ErrorResponse, ForecastItem, WeatherResponse } from "@/types/weather";
+import { findNearestForecast } from "@/lib/commute";
+import { fetchWeather, isAbortError } from "@/lib/fetchWeather";
+import type { ForecastItem, WeatherResponse } from "@/types/weather";
 
 type State =
   | { status: "idle" }
@@ -27,6 +31,9 @@ function groupByDate(forecasts: ForecastItem[]) {
 
 export default function WeatherApp() {
   const [state, setState] = useState<State>({ status: "idle" });
+  // 出勤・帰宅の時刻（HH:mm、現地時間）。都市を検索し直しても保つ
+  const [departTime, setDepartTime] = useState("08:00");
+  const [returnTime, setReturnTime] = useState("18:00");
   // 連続で検索したとき、前のリクエストを取り消すため
   const abortRef = useRef<AbortController | null>(null);
 
@@ -38,35 +45,27 @@ export default function WeatherApp() {
     setState({ status: "loading" });
 
     try {
-      // ブラウザからは自分のサーバーの API Route を呼ぶ（APIキーはサーバー側だけ）
-      const res = await fetch(`/api/weather?city=${encodeURIComponent(city)}`, {
-        signal: controller.signal,
-      });
+      const result = await fetchWeather(city, controller.signal);
 
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as ErrorResponse | null;
-        const message = body?.error ?? "天気情報の取得に失敗しました。";
+      if (!result.ok) {
         setState(
-          res.status === 404
-            ? { status: "notFound", message }
-            : { status: "error", message },
+          result.kind === "notFound"
+            ? { status: "notFound", message: result.message }
+            : { status: "error", message: result.message },
         );
         return;
       }
 
-      const data = (await res.json()) as WeatherResponse;
       // 都市を検索し直したら、選択日はその都市の予報がある最初の日に戻す
       setState({
         status: "success",
-        data,
-        selectedDate: data.forecasts[0]?.localDate ?? "",
+        data: result.data,
+        selectedDate: result.data.forecasts[0]?.localDate ?? "",
       });
     } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") return;
-      setState({
-        status: "error",
-        message: "通信に失敗しました。ネットワーク接続を確認してください。",
-      });
+      // 新しい検索で取り消された古いリクエストは無視する
+      if (isAbortError(e)) return;
+      throw e;
     }
   };
 
@@ -81,6 +80,19 @@ export default function WeatherApp() {
   const groups = useMemo(() => groupByDate(forecasts ?? []), [forecasts]);
   const availableDates = [...groups.keys()];
   const latest = forecasts?.[0];
+
+  // 出勤・帰宅の時刻に最も近い予報。出勤・帰宅予報と服装の目安の両方で同じものを使う
+  const findCommuteForecast = (time: string) =>
+    state.status === "success" && time
+      ? findNearestForecast(
+          state.data.forecasts,
+          state.selectedDate,
+          time,
+          state.data.city.timezone,
+        )
+      : undefined;
+  const departForecast = findCommuteForecast(departTime);
+  const returnForecast = findCommuteForecast(returnTime);
 
   return (
     <div className="flex w-full flex-col gap-6">
@@ -125,6 +137,17 @@ export default function WeatherApp() {
             selectedDate={state.selectedDate}
             onChange={handleDateChange}
           />
+          <CommuteForecast
+            date={state.selectedDate}
+            timezone={state.data.city.timezone}
+            departTime={departTime}
+            returnTime={returnTime}
+            departForecast={departForecast}
+            returnForecast={returnForecast}
+            onDepartTimeChange={setDepartTime}
+            onReturnTimeChange={setReturnTime}
+          />
+          <ClothingAdvice departForecast={departForecast} returnForecast={returnForecast} />
           <HourlyList
             date={state.selectedDate}
             forecasts={groups.get(state.selectedDate) ?? []}

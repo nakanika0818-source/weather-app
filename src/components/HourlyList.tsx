@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { formatDate } from "@/lib/format";
 import type { ForecastItem } from "@/types/weather";
 
 type Props = {
@@ -7,16 +8,6 @@ type Props = {
   /** その日の 3 時間ごとの予報 */
   forecasts: ForecastItem[];
 };
-
-// "2026-10-01" → "10月1日(木)"
-function formatDate(date: string) {
-  return new Intl.DateTimeFormat("ja-JP", {
-    timeZone: "UTC", // 日付文字列をそのまま表示したいので UTC として扱う
-    month: "long",
-    day: "numeric",
-    weekday: "short",
-  }).format(new Date(`${date}T00:00:00Z`));
-}
 
 export default function HourlyList({ date, forecasts }: Props) {
   return (

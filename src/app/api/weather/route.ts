@@ -25,6 +25,9 @@ type OwmForecast = {
     main: { temp: number; humidity: number };
     weather: { description: string; icon: string }[];
     pop: number;
+    // 雨・雪が予報されていない時間帯は、項目自体が省略される
+    rain?: { "3h"?: number };
+    snow?: { "3h"?: number };
   }[];
 };
 
@@ -100,6 +103,7 @@ export async function GET(request: NextRequest) {
         icon: item.weather[0]?.icon ?? "",
         humidity: item.main.humidity,
         pop: Math.round(item.pop * 100),
+        precipitation: (item.rain?.["3h"] ?? 0) + (item.snow?.["3h"] ?? 0),
       };
     });
 
